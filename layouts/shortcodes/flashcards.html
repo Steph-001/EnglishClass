@@ -796,6 +796,16 @@ this.viewMode = 'browse';
 updateModeButton(text, className) {
 this.elements.modeToggleBtn.textContent = text;
 this.elements.modeToggleBtn.className = `btn ${className}`;
+
+// Show/hide difficulty buttons based on mode
+const difficultyButtons = document.querySelector('.difficulty-buttons');
+if (difficultyButtons) {
+if (this.viewMode === 'study') {
+difficultyButtons.style.display = 'flex';
+} else {
+difficultyButtons.style.display = 'none';
+}
+}
 }
 
 toggleViewMode() {
