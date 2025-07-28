@@ -92,6 +92,7 @@
 </div>
 </div>
 </div>
+
 <style>
 /* Your existing CSS styles */
 .flashcards-container {
@@ -440,6 +441,7 @@ min-width: 120px;
 .card-content { padding: clamp(0.8rem, 3vw, 1.2rem); }
 }
 </style>
+
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
 // Initialize Supabase
@@ -596,6 +598,16 @@ this.startBrowseMode();
 });
 }
 
+// Fisher-Yates Shuffle Algorithm
+shuffleArray(array) {
+const shuffled = [...array]; // Create a copy to avoid mutating original
+for (let i = shuffled.length - 1; i > 0; i--) {
+const j = Math.floor(Math.random() * (i + 1));
+[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+}
+return shuffled;
+}
+
 // Card filtering - the key difference between regular and early review
 getDueCards(includeEarly = false) {
 const now = Date.now();
@@ -725,9 +737,10 @@ startStudyMode() {
 const dueCards = this.getDueCards();
 if (dueCards.length > 0) {
 this.viewMode = 'study';
-this.cardOrder = [...dueCards];
+// AUTO-SHUFFLE: Randomize the due cards for study mode
+this.cardOrder = this.shuffleArray(dueCards);
 this.currentIndex = 0;
-this.updateModeButton('📚 Study', 'btn-primary');
+this.updateModeButton('📚 Studying', 'btn-primary');
 this.updateCard();
 } else {
 this.checkForEarlyReview();
@@ -741,9 +754,10 @@ const earlyOnly = allEarly.filter(idx => !dueNow.includes(idx));
 
 if (earlyOnly.length > 0) {
 this.viewMode = 'study';
-this.cardOrder = [...earlyOnly];
+// AUTO-SHUFFLE: Randomize the early review cards
+this.cardOrder = this.shuffleArray(earlyOnly);
 this.currentIndex = 0;
-this.updateModeButton('📚 Study', 'btn-primary');
+this.updateModeButton('📚 Studying', 'btn-primary');
 this.updateCard();
 } else {
 alert("No cards are available for early review right now.");
@@ -752,9 +766,10 @@ alert("No cards are available for early review right now.");
 
 startBrowseMode() {
 this.viewMode = 'browse';
+// BROWSE MODE: Use sequential/alphabetical order
 this.cardOrder = [...Array(this.flashcards.length).keys()];
 this.currentIndex = 0;
-this.updateModeButton('📖 Browse', 'btn-secondary');
+this.updateModeButton('📖 Browsing', 'btn-secondary');
 this.updateCard();
 }
 
@@ -840,6 +855,7 @@ answer = card.term;
 this.elements.cardQuestion.textContent = question;
 this.elements.cardQuestionBack.textContent = question;
 this.elements.cardAnswer.textContent = answer;
+
 this.elements.currentCard.textContent = this.currentIndex + 1;
 this.elements.totalCards.textContent = this.cardOrder.length;
 
@@ -879,9 +895,9 @@ if (radio) radio.checked = true;
 
 // Set mode button
 if (this.viewMode === 'study') {
-this.updateModeButton('📚 Study', 'btn-primary');
+this.updateModeButton('📚 Studying', 'btn-primary');
 } else {
-this.updateModeButton('📖 Browse', 'btn-secondary');
+this.updateModeButton('📖 Browsing', 'btn-secondary');
 }
 }
 
@@ -923,7 +939,7 @@ this.saveProgressSilent();
 // Completion
 showCompletionMessage() {
 this.viewMode = 'browse';
-this.updateModeButton('📖 Browse', 'btn-secondary');
+this.updateModeButton('📖 Browsing', 'btn-secondary');
 
 const nextReview = this.getNextReviewTime();
 const allEarly = this.getDueCards(true);
@@ -989,19 +1005,21 @@ initializeSession() {
 if (this.viewMode === 'study') {
 const dueCards = this.getDueCards();
 if (dueCards.length > 0) {
-this.cardOrder = [...dueCards];
+// AUTO-SHUFFLE: Apply shuffle if loading into study mode
+this.cardOrder = this.shuffleArray(dueCards);
 this.currentIndex = 0;
-this.updateModeButton('📚 Study', 'btn-primary');
+this.updateModeButton('📚 Studying', 'btn-primary');
 } else {
 this.viewMode = 'browse';
 this.cardOrder = [...Array(this.flashcards.length).keys()];
 this.currentIndex = Math.min(this.currentIndex, this.cardOrder.length - 1);
-this.updateModeButton('📖 Browse', 'btn-secondary');
+this.updateModeButton('📖 Browsing', 'btn-secondary');
 }
 } else {
+// BROWSE MODE: Sequential order
 this.cardOrder = [...Array(this.flashcards.length).keys()];
 this.currentIndex = Math.min(this.currentIndex, this.cardOrder.length - 1);
-this.updateModeButton('📖 Browse', 'btn-secondary');
+this.updateModeButton('📖 Browsing', 'btn-secondary');
 }
 }
 
@@ -1192,6 +1210,7 @@ viewMode: localData.viewMode
 },
 stats: localData.sessionStats
 });
+
 await this.saveProgressSilent();
 }
 } catch (e) {
