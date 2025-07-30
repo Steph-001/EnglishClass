@@ -3,8 +3,18 @@ title: "Black American Indians"
 date: 2025-04-17T21:53:23+02:00
 draft: false
 lexicon:
-    - term: "c**u**stom"
-      definition: "things people do because they are traditional"
+    - term: "terminate"
+      definition: "finish"
+      stressed: "t*erminate"
+    - term: "hero"
+      definition: "good guy"
+      stressed: "h*ero"
+    - term: boy
+      definition: not a girl
+      stressed: boy
+    - term: "downtrodden"
+      definition: "persecuted"
+      stressed: "d*o*wntrodden"
 ---
 ##### How do African-Native Americans keep their dual identity alive?
 

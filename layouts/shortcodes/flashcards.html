@@ -1,4 +1,4 @@
-<!-- layouts/shortcards/flashcards.html -->
+<!-- layouts/shortcodes/flashcards.html -->
 {{ $indexPage := .Page.Parent }}
 {{ if not $indexPage }}
 {{ $indexPage = .Page.Site.GetPage (.Page.Dir | strings.TrimSuffix "/") }}
@@ -94,6 +94,12 @@
 </div>
 
 <style>
+/* Stressed vowel styling - NEW */
+.stressed-vowel {
+  color: red !important;
+  font-weight: bold;
+}
+
 /* Your existing CSS styles */
 .flashcards-container {
 max-width: 600px;
@@ -455,22 +461,18 @@ const supabaseClient = createClient(
 let authCheckInProgress = false;
 let lastAuthCheck = 0;
 const AUTH_CHECK_THROTTLE = 5000; // 5 seconds minimum between checks
-
 async function updateAuthLink() {
 const now = Date.now();
 if (authCheckInProgress || (now - lastAuthCheck) < AUTH_CHECK_THROTTLE) {
 return; // Skip if recently checked or in progress
 }
-
 authCheckInProgress = true;
 lastAuthCheck = now;
-
 const authLink = document.getElementById('auth-link');
 if (!authLink) {
 authCheckInProgress = false;
 return;
 }
-
 try {
 const { data: { session }, error } = await supabaseClient.auth.getSession();
 if (error || !session?.user) {
@@ -479,18 +481,13 @@ authLink.href = '/login/';
 authLink.onclick = null;
 return;
 }
-
 authLink.textContent = 'Logout';
 authLink.onclick = async function(e) {
 e.preventDefault();
 try {
 await supabaseClient.auth.signOut();
-localStorage.clear();
-sessionStorage.clear();
 window.location.reload();
 } catch (err) {
-localStorage.clear();
-sessionStorage.clear();
 window.location.reload();
 }
 };
@@ -506,13 +503,14 @@ authCheckInProgress = false;
 // Flashcard System
 class FlashcardSystem {
 constructor() {
-// Data from Hugo
+// Data from Hugo - NOW INCLUDES STRESSED FIELD
 this.flashcards = [
 {{ range $indexPage.Params.lexicon }}
 {{ if and .term .definition (ne .term "") (ne .definition "") }}
 {
 term: {{ .term | jsonify }},
 definition: {{ .definition | jsonify }},
+stressed: {{ .stressed | jsonify }},
 id: {{ printf "%s_%s" .term .definition | sha256 | jsonify }}
 },
 {{ end }}
@@ -540,6 +538,16 @@ this.loadProgress().then(() => {
 this.initializeSession();
 this.updateDisplay();
 });
+}
+
+// NEW: Stress processing method
+processStressedText(text) {
+if (!text) return text;
+
+// Convert *vowel notation to red spans
+let processed = text.replace(/\*([aeiouwAEIOUáéíóúÁÉÍÓÚ])/g, '<span class="stressed-vowel">$1</span>');
+
+return processed;
 }
 
 initDOM() {
@@ -578,20 +586,16 @@ this.elements.resetBtn.addEventListener('click', () => this.resetProgress());
 this.elements.easyBtn.addEventListener('click', () => this.markDifficulty('easy'));
 this.elements.mediumBtn.addEventListener('click', () => this.markDifficulty('medium'));
 this.elements.hardBtn.addEventListener('click', () => this.markDifficulty('hard'));
-
 this.elements.modeRadios.forEach(radio => {
 radio.addEventListener('change', (e) => this.changeStudyMode(e.target.value));
 });
-
 document.getElementById('close-completion').addEventListener('click', () => {
 this.elements.completionMessage.style.display = 'none';
 });
-
 document.getElementById('early-review-option').addEventListener('click', () => {
 this.elements.completionMessage.style.display = 'none';
 this.startEarlyReview();
 });
-
 document.getElementById('browse-all-option').addEventListener('click', () => {
 this.elements.completionMessage.style.display = 'none';
 this.startBrowseMode();
@@ -612,7 +616,6 @@ return shuffled;
 getDueCards(includeEarly = false) {
 const now = Date.now();
 const allIndices = [...Array(this.flashcards.length).keys()];
-
 if (includeEarly) {
 const earlyThreshold = now + (24 * 60 * 60 * 1000);
 return allIndices.filter(idx => {
@@ -638,7 +641,6 @@ lastReviewed: Date.now(),
 nextReview: Date.now()
 };
 }
-
 const card = this.cardData[cardIndex];
 card.reviewCount++;
 card.lastReviewed = Date.now();
@@ -666,19 +668,11 @@ card.interval = Math.round(card.interval * card.easeFactor);
 }
 card.easeFactor = Math.min(2.5, card.easeFactor + 0.15);
 }
-
 card.nextReview = Date.now() + (card.interval * 24 * 60 * 60 * 1000);
 }
 
 // Unified difficulty marking - ONLY updates counters in study mode
 async markDifficulty(level) {
-console.log('=== markDifficulty DEBUG ===');
-console.log('Level:', level);
-console.log('View mode:', this.viewMode);
-console.log('Current index:', this.currentIndex);
-console.log('Card order:', this.cardOrder);
-console.log('Is flipped:', this.isFlipped);
-
 if (!this.isFlipped) {
 this.flipCard();
 return;
@@ -686,13 +680,10 @@ return;
 
 // CRITICAL FIX: Only process difficulty in study mode
 if (this.viewMode !== 'study') {
-console.log('Not in study mode - ignoring difficulty marking');
 return;
 }
 
 const cardIndex = this.cardOrder[this.currentIndex];
-console.log('Card index:', cardIndex);
-console.log('Card data BEFORE:', JSON.stringify(this.cardData[cardIndex]));
 
 // Update session stats - only in study mode
 if (!this.reviewedInSession.has(cardIndex)) {
@@ -710,20 +701,16 @@ else if (level === 'hard') this.sessionStats.hard++;
 
 // Apply SM-2 algorithm
 this.updateCardWithSM2(cardIndex, level);
-console.log('Card data AFTER SM-2:', JSON.stringify(this.cardData[cardIndex]));
 
 // Save and update display
 await this.saveProgress();
-console.log('saveProgress() called');
 this.updateStatsDisplay();
-console.log('updateStatsDisplay() called');
 
 // Handle navigation - remove reviewed card from current session
 this.cardOrder.splice(this.currentIndex, 1);
 if (this.currentIndex >= this.cardOrder.length && this.cardOrder.length > 0) {
 this.currentIndex = this.cardOrder.length - 1;
 }
-
 if (this.cardOrder.length > 0) {
 this.updateCard();
 } else {
@@ -751,7 +738,6 @@ startEarlyReview() {
 const allEarly = this.getDueCards(true);
 const dueNow = this.getDueCards(false);
 const earlyOnly = allEarly.filter(idx => !dueNow.includes(idx));
-
 if (earlyOnly.length > 0) {
 this.viewMode = 'study';
 // AUTO-SHUFFLE: Randomize the early review cards
@@ -777,7 +763,6 @@ checkForEarlyReview() {
 const allEarly = this.getDueCards(true);
 const dueNow = this.getDueCards(false);
 const earlyCount = allEarly.length - dueNow.length;
-
 if (earlyCount > 0) {
 const message = `No cards are due right now, but you have ${earlyCount} card${earlyCount !== 1 ? 's' : ''} due within 24 hours.\n\nWould you like to review them early?`;
 if (confirm(message)) {
@@ -796,7 +781,6 @@ this.viewMode = 'browse';
 updateModeButton(text, className) {
 this.elements.modeToggleBtn.textContent = text;
 this.elements.modeToggleBtn.className = `btn ${className}`;
-
 // Show/hide difficulty buttons based on mode
 const difficultyButtons = document.querySelector('.difficulty-buttons');
 if (difficultyButtons) {
@@ -822,7 +806,6 @@ handleEarlyReview() {
 const allEarly = this.getDueCards(true);
 const dueNow = this.getDueCards(false);
 const earlyCount = allEarly.length - dueNow.length;
-
 if (earlyCount > 0) {
 this.startEarlyReview();
 } else if (dueNow.length > 0) {
@@ -832,12 +815,12 @@ alert("No cards are available for early review right now.");
 }
 }
 
-// Display Updates
+// MODIFIED: Display Updates with stress processing
 updateCard() {
 if (this.flashcards.length === 0) {
-this.elements.cardQuestion.textContent = "No flashcards available";
-this.elements.cardQuestionBack.textContent = "No flashcards available";
-this.elements.cardAnswer.textContent = "Please add lexicon data to the front matter";
+this.elements.cardQuestion.innerHTML = "No flashcards available";
+this.elements.cardQuestionBack.innerHTML = "No flashcards available";
+this.elements.cardAnswer.innerHTML = "Please add lexicon data to the front matter";
 return;
 }
 
@@ -855,16 +838,19 @@ return;
 
 let question, answer;
 if (this.studyMode === 'term-to-definition') {
-question = card.term;
+// Use stressed version if available, fallback to regular term
+question = card.stressed || card.term;
 answer = card.definition;
 } else {
 question = card.definition;
-answer = card.term;
+// Use stressed version if available, fallback to regular term
+answer = card.stressed || card.term;
 }
 
-this.elements.cardQuestion.textContent = question;
-this.elements.cardQuestionBack.textContent = question;
-this.elements.cardAnswer.textContent = answer;
+// CHANGED: Use innerHTML and process stress marks
+this.elements.cardQuestion.innerHTML = this.processStressedText(question);
+this.elements.cardQuestionBack.innerHTML = this.processStressedText(question);
+this.elements.cardAnswer.innerHTML = this.processStressedText(answer);
 
 this.elements.currentCard.textContent = this.currentIndex + 1;
 this.elements.totalCards.textContent = this.cardOrder.length;
@@ -882,27 +868,17 @@ updateStatsDisplay() {
 const totalReviewed = Object.values(this.cardData).filter(card => card && card.reviewCount > 0).length;
 const needsReview = this.getDueCards().length;
 
-console.log('=== updateStatsDisplay DEBUG ===');
-console.log('Total reviewed calculation:', totalReviewed);
-console.log('Session easy count:', this.sessionStats.easy);
-console.log('Needs review calculation:', needsReview);
-console.log('Card data for review calculation:', Object.keys(this.cardData));
-
 this.elements.reviewedCount.textContent = totalReviewed;
 this.elements.easyCount.textContent = this.sessionStats.easy;
 this.elements.reviewCount.textContent = needsReview;
-
-console.log('DOM elements updated');
 }
 
 updateDisplay() {
 this.updateCard();
 this.updateStatsDisplay();
-
 // Set study mode radio
 const radio = document.querySelector(`input[value="${this.studyMode}"]`);
 if (radio) radio.checked = true;
-
 // Set mode button
 if (this.viewMode === 'study') {
 this.updateModeButton('📚 Studying', 'btn-primary');
@@ -950,7 +926,6 @@ this.saveProgressSilent();
 showCompletionMessage() {
 this.viewMode = 'browse';
 this.updateModeButton('📖 Browsing', 'btn-secondary');
-
 const nextReview = this.getNextReviewTime();
 const allEarly = this.getDueCards(true);
 const dueNow = this.getDueCards(false);
@@ -961,7 +936,6 @@ if (nextReview) {
 const timeUntil = nextReview - Date.now();
 const hoursUntil = Math.ceil(timeUntil / (1000 * 60 * 60));
 const daysUntil = Math.ceil(timeUntil / (1000 * 60 * 60 * 24));
-
 if (hoursUntil < 24) {
 message += ` Next cards will be ready in about ${hoursUntil} hour${hoursUntil !== 1 ? 's' : ''}.`;
 } else {
@@ -970,7 +944,6 @@ message += ` Next cards will be ready in about ${daysUntil} day${daysUntil !== 1
 }
 
 this.elements.completionText.textContent = message;
-
 if (earlyCards > 0) {
 this.elements.earlyReviewOption.style.display = 'inline-block';
 this.elements.earlyReviewOption.textContent = `⏰ Review ${earlyCards} Early Card${earlyCards !== 1 ? 's' : ''}`;
@@ -985,7 +958,6 @@ this.saveProgressSilent();
 getNextReviewTime() {
 const now = Date.now();
 let earliest = null;
-
 for (let i = 0; i < this.flashcards.length; i++) {
 const card = this.cardData[i];
 if (card && card.nextReview && card.nextReview > now) {
@@ -994,7 +966,6 @@ earliest = card.nextReview;
 }
 }
 }
-
 return earliest;
 }
 
@@ -1035,20 +1006,12 @@ this.updateModeButton('📖 Browsing', 'btn-secondary');
 
 // Data persistence - FIXED: Added silent save method
 async saveProgress() {
-console.log('=== saveProgress DEBUG ===');
-console.log('Card data being saved:', JSON.stringify(this.cardData));
-console.log('Session stats being saved:', JSON.stringify(this.sessionStats));
-
 this.saveToLocalStorage();
-console.log('saveToLocalStorage() completed');
-
 try {
 const { data: { session }, error } = await supabaseClient.auth.getSession();
 if (error || !session?.user?.id) {
-console.log('No auth session, only localStorage save');
 return;
 }
-
 const progressData = {
 user_id: session.user.id,
 set_id: this.setId,
@@ -1064,16 +1027,12 @@ stats: this.sessionStats,
 updated_at: new Date().toISOString()
 };
 
-console.log('Saving to Supabase:', JSON.stringify(progressData));
-
 const { error: saveError } = await supabaseClient
 .from('flashcard_progress')
 .upsert(progressData, { onConflict: 'user_id,set_id' });
 
 if (saveError) {
 console.error('Supabase save error:', saveError);
-} else {
-console.log('Supabase save successful');
 }
 } catch (e) {
 console.error('Error saving progress:', e);
@@ -1083,13 +1042,11 @@ console.error('Error saving progress:', e);
 // Silent save method - doesn't trigger stats updates
 async saveProgressSilent() {
 this.saveToLocalStorage();
-
 try {
 const { data: { session }, error } = await supabaseClient.auth.getSession();
 if (error || !session?.user?.id) {
 return;
 }
-
 const progressData = {
 user_id: session.user.id,
 set_id: this.setId,
@@ -1104,7 +1061,6 @@ cardData: this.cardData
 stats: this.sessionStats,
 updated_at: new Date().toISOString()
 };
-
 await supabaseClient
 .from('flashcard_progress')
 .upsert(progressData, { onConflict: 'user_id,set_id' });
@@ -1118,14 +1074,12 @@ async loadProgress() {
 this.cardData = {};
 this.sessionStats = { reviewed: 0, easy: 0, medium: 0, hard: 0 };
 this.reviewedInSession = new Set();
-
 try {
 const { data: { session }, error } = await supabaseClient.auth.getSession();
 if (error || !session?.user?.id) {
 this.loadFromLocalStorage();
 return;
 }
-
 const { data, error: dbError } = await supabaseClient
 .from('flashcard_progress')
 .select('*')
@@ -1166,7 +1120,6 @@ data.card_data.studyMode : 'term-to-definition';
 this.viewMode = ['browse', 'study'].includes(data.card_data.viewMode) ?
 data.card_data.viewMode : 'browse';
 }
-
 if (data.stats && typeof data.stats === 'object') {
 this.sessionStats = {
 reviewed: data.stats.reviewed || 0,
@@ -1203,12 +1156,10 @@ async migrateLocalStorageIfNewer(dbUpdatedAt) {
 const storageKey = `flashcards_${this.setId}`;
 const saved = localStorage.getItem(storageKey);
 if (!saved) return;
-
 try {
 const localData = JSON.parse(saved);
 const localUpdated = new Date(localData.lastUpdated || 0);
 const dbUpdated = new Date(dbUpdatedAt);
-
 if (localUpdated > dbUpdated) {
 this.loadFromData({
 card_data: {
@@ -1220,7 +1171,6 @@ viewMode: localData.viewMode
 },
 stats: localData.sessionStats
 });
-
 await this.saveProgressSilent();
 }
 } catch (e) {
@@ -1240,7 +1190,6 @@ sessionStats: this.sessionStats,
 lastUpdated: new Date().toISOString(),
 setTitle: this.setTitle
 };
-
 try {
 localStorage.setItem(storageKey, JSON.stringify(data));
 } catch (e) {
@@ -1285,8 +1234,5 @@ updateAuthLink();
 window.addEventListener('focus', () => {
 setTimeout(updateAuthLink, 1000); // Delay to avoid rapid firing
 });
-
-// Remove storage listener that was causing extra requests
-// window.addEventListener('storage', ...) - removed to prevent loops
 </script>
 {{ end }}
