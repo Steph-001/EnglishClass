@@ -53,6 +53,9 @@ lexicon:
       definition: "if a film or story is set in a particular place or period, the aciton is taking place there or then."
     - term: "(to) shave"
       definition: "(to) cut off hair very close using a razor"
+    - term: "downsize"
+      definition: "make smaller"
+      stressed: "d*o*wsize"
 ---
 ### A - Evolving figures
 
