@@ -53,10 +53,10 @@ def add_lexicon_entries(file_path):
         return
 
     new_entries = []
-    print("\nAdding new lexicon entries. Type 'done' to finish.")
+    print("\nAdding new lexicon entries. Leave term empty to finish.")
     while True:
-        term_input = input("\nEnter term (or 'done' to finish): ").strip()
-        if term_input.lower() == 'done':
+        term_input = input("\nEnter term (leave empty to finish): ").strip()
+        if term_input == '':
             break
 
         definition = input("Enter definition: ").strip()
