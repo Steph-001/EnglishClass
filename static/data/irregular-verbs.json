@@ -1,0 +1,17 @@
+[
+  {
+    "base": "go",
+    "past": "went",
+    "participle": "gone"
+  },
+  {
+    "base": "be",
+    "past": "was/were",
+    "participle": "been"
+  },
+  {
+    "base": "think",
+    "past": "thought",
+    "participle": "thought"
+  }
+]
