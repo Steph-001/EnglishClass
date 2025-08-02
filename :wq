@@ -1,0 +1,383 @@
+<!-- Link to Supabase library. If you already have it globally on your site, you can remove this. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  /* Basic styling for the flashcard system, adapted from the reference */
+  .verb-flashcards-container {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 1rem;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    text-align: center;
+    color: #333;
+    overflow: hidden;
+  }
+  .vfc-login-prompt {
+    padding: 2rem;
+    background-color: #fff;
+    border-radius: 8px;
+  }
+  .vfc-login-prompt a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: bold;
+  }
+  .vfc-card-scene {
+    width: 100%;
+    height: 250px;
+    perspective: 1000px;
+    margin-bottom: 1.5rem;
+  }
+  .vfc-card {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.6s;
+    cursor: pointer;
+  }
+  .vfc-card.is-flipped {
+    transform: rotateY(180deg);
+  }
+  .vfc-card-face {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+    font-weight: bold;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background-color: #fff;
+  }
+  .vfc-card-back {
+    transform: rotateY(180deg);
+    font-size: 1.8rem;
+  }
+  .vfc-answer-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    visibility: hidden;
+  }
+  .vfc-btn {
+    padding: 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #fff;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .vfc-btn:active {
+    transform: translateY(1px);
+    box-shadow: none;
+  }
+  #vfc-btn-again { background-color: #dc3545; }
+  #vfc-btn-hard { background-color: #fd7e14; }
+  #vfc-btn-medium { background-color: #ffc107; }
+  #vfc-btn-easy { background-color: #28a745; }
+  .vfc-progress-container {
+    margin-top: 1.5rem;
+  }
+  .vfc-progress-bar {
+    width: 100%;
+    height: 10px;
+    background-color: #e9ecef;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .vfc-progress-bar-inner {
+    height: 100%;
+    width: 0%;
+    background-color: #007bff;
+    transition: width 0.5s;
+  }
+  .vfc-progress-text {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: #6c757d;
+  }
+  #vfc-loader {
+    font-size: 1.2rem;
+    color: #6c757d;
+  }
+</style>
+
+<div id="irregular-verbs-app" class="verb-flashcards-container">
+  <h2>Irregular Verbs Practice</h2>
+  
+  <div id="vfc-user-session">
+    <div id="vfc-loader">Loading cards...</div>
+    <div id="vfc-login-prompt" class="vfc-login-prompt" style="display: none;">
+      <p>Please <a href="/login">log in</a> to save your progress and practice.</p>
+    </div>
+  </div>
+  
+  <div id="vfc-main-content" style="display: none;">
+    <div class="vfc-card-scene">
+      <div id="vfc-card" class="vfc-card">
+        <div id="vfc-card-front" class="vfc-card-face"></div>
+        <div id="vfc-card-back" class="vfc-card-face vfc-card-back"></div>
+      </div>
+    </div>
+    
+    <div id="vfc-answer-buttons" class="vfc-answer-buttons">
+      <button id="vfc-btn-again" data-difficulty="0" class="vfc-btn">Again</button>
+      <button id="vfc-btn-hard" data-difficulty="1" class="vfc-btn">Hard</button>
+      <button id="vfc-btn-medium" data-difficulty="2" class="vfc-btn">Medium</button>
+      <button id="vfc-btn-easy" data-difficulty="3" class="vfc-btn">Easy</button>
+    </div>
+
+    <div class="vfc-progress-container">
+      <div class="vfc-progress-bar">
+        <div id="vfc-progress-bar-inner" class="vfc-progress-bar-inner"></div>
+      </div>
+      <div id="vfc-progress-text" class="vfc-progress-text"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  // --- CONFIGURATION ---
+  // IMPORTANT: Replace with your actual Supabase URL and Key.
+  const SUPABASE_URL = 'YOUR_SUPABASE_URL'; 
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  const SUPABASE_TABLE_NAME = 'verb_flashcard_progress';
+  const VERBS_JSON_PATH = '/data/irregular-verbs.json';
+
+  // --- DOM ELEMENTS ---
+  const app = document.getElementById('irregular-verbs-app');
+  const loader = app.querySelector('#vfc-loader');
+  const loginPrompt = app.querySelector('#vfc-login-prompt');
+  const mainContent = app.querySelector('#vfc-main-content');
+  const cardElement = app.querySelector('#vfc-card');
+  const cardFront = app.querySelector('#vfc-card-front');
+  const cardBack = app.querySelector('#vfc-card-back');
+  const answerButtons = app.querySelector('#vfc-answer-buttons');
+  const progressBarInner = app.querySelector('#vfc-progress-bar-inner');
+  const progressText = app.querySelector('#vfc-progress-text');
+
+  // --- APP STATE ---
+  let supabase, user, allCards = [], dueCards = [], currentCard = null;
+
+  // --- INITIALIZATION ---
+  try {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    checkUserSession();
+  } catch (error) {
+    console.error("Supabase client failed to initialize.", error);
+    loader.textContent = "Error: Could not connect to the learning service.";
+  }
+  
+  // --- AUTHENTICATION ---
+  async function checkUserSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+    handleAuthStateChange(session);
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+      handleAuthStateChange(session);
+    });
+  }
+
+  function handleAuthStateChange(session) {
+    if (session && session.user) {
+      user = session.user;
+      loginPrompt.style.display = 'none';
+      mainContent.style.display = 'block';
+      loader.style.display = 'block';
+      initializeApp();
+    } else {
+      user = null;
+      mainContent.style.display = 'none';
+      loader.style.display = 'none';
+      loginPrompt.style.display = 'block';
+    }
+  }
+
+  // --- DATA FETCHING & PROCESSING ---
+  async function initializeApp() {
+    const [verbData, progressData] = await Promise.all([
+      fetchVerbs(),
+      fetchProgress()
+    ]);
+
+    if (!verbData) {
+      loader.textContent = "Failed to load verb list.";
+      return;
+    }
+    
+    allCards = generateCards(verbData, progressData);
+    loader.style.display = 'none';
+    showNextCard();
+    updateProgressUI();
+  }
+
+  async function fetchVerbs() {
+    try {
+      const response = await fetch(VERBS_JSON_PATH);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching verbs JSON:', error);
+      return null;
+    }
+  }
+
+  async function fetchProgress() {
+    if (!user) return [];
+    try {
+      const { data, error } = await supabase
+        .from(SUPABASE_TABLE_NAME)
+        .select('*')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching progress:', error);
+      return [];
+    }
+  }
+
+  function generateCards(verbs, progress) {
+    const progressMap = new Map(progress.map(p => [p.card_id, p]));
+    const cards = [];
+    
+    verbs.forEach(verb => {
+      const baseForm = verb.v1;
+      const backContent = `${verb.v1} / ${verb.v2} / ${verb.v3}`;
+      
+      // Card types: v1, v2, v3
+      const cardTypes = [
+        { type: 'v1', front: verb.v1 },
+        { type: 'v2', front: verb.v2 },
+        { type: 'v3', front: verb.v3 },
+      ];
+
+      cardTypes.forEach(cardType => {
+        const cardId = `${baseForm}-${cardType.type}`;
+        const savedProgress = progressMap.get(cardId) || {};
+        
+        cards.push({
+          id: cardId,
+          verb: baseForm,
+          front: cardType.front,
+          back: backContent,
+          interval: savedProgress.interval || 0,
+          easeFactor: savedProgress.ease_factor || 2.5,
+          dueDate: savedProgress.due_date ? new Date(savedProgress.due_date) : new Date(),
+          isNew: !savedProgress.card_id,
+        });
+      });
+    });
+    return cards;
+  }
+
+  // --- CARD & UI LOGIC ---
+  function showNextCard() {
+    cardElement.classList.remove('is-flipped');
+    answerButtons.style.visibility = 'hidden';
+    
+    const now = new Date();
+    dueCards = allCards.filter(card => card.dueDate <= now);
+
+    if (dueCards.length > 0) {
+      // Simple random selection from due cards
+      currentCard = dueCards[Math.floor(Math.random() * dueCards.length)];
+      cardFront.textContent = currentCard.front;
+      cardBack.textContent = currentCard.back;
+      mainContent.style.display = 'block';
+    } else {
+      mainContent.style.display = 'none';
+      loader.style.display = 'block';
+      loader.textContent = "All verbs reviewed for now. Great job!";
+    }
+  }
+  
+  function flipCard() {
+    cardElement.classList.add('is-flipped');
+    answerButtons.style.visibility = 'visible';
+  }
+  
+  function updateProgressUI() {
+    const now = new Date();
+    const reviewedCount = allCards.filter(c => !c.isNew && c.dueDate > now).length;
+    const totalCount = allCards.length;
+    const percentage = totalCount > 0 ? (reviewedCount / totalCount) * 100 : 0;
+    
+    progressBarInner.style.width = `${percentage}%`;
+    progressText.textContent = `Progress: ${reviewedCount} / ${totalCount} cards mastered`;
+  }
+
+  // --- SM-2 ALGORITHM & DATA PERSISTENCE ---
+  function handleAnswer(difficulty) {
+    // SM-2 Spaced Repetition Algorithm Logic
+    let { interval, easeFactor, isNew } = currentCard;
+
+    if (difficulty < 2) { // "Again" or "Hard"
+      interval = 1; // Show again tomorrow
+      if (difficulty < 1) { // "Again"
+        easeFactor = Math.max(1.3, easeFactor - 0.2);
+      }
+    } else { // "Medium" or "Easy"
+      if (isNew) {
+        interval = difficulty === 2 ? 1 : 4; // 1 day for Medium, 4 for Easy
+      } else {
+        interval = Math.ceil(interval * easeFactor);
+      }
+      easeFactor += (0.1 - (4 - difficulty) * (0.08 + (4 - difficulty) * 0.02));
+      easeFactor = Math.max(1.3, easeFactor);
+    }
+    
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + interval);
+    dueDate.setHours(0, 0, 0, 0); // Set to start of the day
+
+    // Update card state
+    currentCard.interval = interval;
+    currentCard.easeFactor = easeFactor;
+    currentCard.dueDate = dueDate;
+    currentCard.isNew = false;
+    
+    saveProgress(currentCard);
+    updateProgressUI();
+    
+    setTimeout(showNextCard, 400); // Wait a bit before showing the next card
+  }
+
+  async function saveProgress(card) {
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from(SUPABASE_TABLE_NAME)
+        .upsert({
+          user_id: user.id,
+          card_id: card.id,
+          interval: card.interval,
+          ease_factor: card.easeFactor,
+          due_date: card.dueDate.toISOString()
+        });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving progress:', error);
+      // Optional: Add UI feedback for save failure
+    }
+  }
+
+  // --- EVENT LISTENERS ---
+  cardElement.addEventListener('click', flipCard);
+  answerButtons.addEventListener('click', (e) => {
+    if (e.target.matches('.vfc-btn')) {
+      const difficulty = parseInt(e.target.dataset.difficulty, 10);
+      handleAnswer(difficulty);
+    }
+  });
+
+</script>

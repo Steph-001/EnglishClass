@@ -6,6 +6,6 @@ type: docs
 weight: 4
 ---
 
-{{< verbs >}}
+{{< irregular-verbs >}}
 
 
