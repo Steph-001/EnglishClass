@@ -1,6 +1,6 @@
 baseURL: "https://test.stephanejacquet.fr" # Change to your actual base URL
 languageCode: "en-us"
-title: " Première" # Change to your site title
+title: "Main" # Change to your site title
 # theme: "docsy"  # <--- REMOVE or COMMENT OUT this line
 
 outputs: # Top-level default outputs
