@@ -56,9 +56,10 @@
 </div>
 <div class="nav-middle">
 <div class="difficulty-buttons">
-<button id="easy-btn" class="btn btn-success">😊 Easy</button>
-<button id="medium-btn" class="btn btn-warning">🤔 Medium</button>
+<button id="again-btn" class="btn btn-danger-dark">🚫 Again</button>
 <button id="hard-btn" class="btn btn-danger">😰 Hard</button>
+<button id="medium-btn" class="btn btn-warning">🤔 Medium</button>
+<button id="easy-btn" class="btn btn-success">😊 Easy</button>
 </div>
 </div>
 <div class="nav-bottom">
@@ -71,11 +72,23 @@
 <span id="reviewed-count">0</span>
 </div>
 <div class="stat">
+<span class="stat-label">Again:</span>
+<span id="again-count">0</span>
+</div>
+<div class="stat">
+<span class="stat-label">Hard:</span>
+<span id="hard-count">0</span>
+</div>
+<div class="stat">
+<span class="stat-label">Medium:</span>
+<span id="medium-count">0</span>
+</div>
+<div class="stat">
 <span class="stat-label">Easy:</span>
 <span id="easy-count">0</span>
 </div>
 <div class="stat">
-<span class="stat-label">Need Review:</span>
+<span class="stat-label">Due:</span>
 <span id="review-count">0</span>
 </div>
 </div>
@@ -92,14 +105,22 @@
 </div>
 </div>
 </div>
-
 <style>
-/* Stressed vowel styling - NEW */
+/* Stressed vowel styling */
 .stressed-vowel {
-  color: red !important;
-  font-weight: bold;
+color: red !important;
+font-weight: bold;
 }
-
+/* New "Again" button styling */
+.btn-danger-dark {
+background: #8b0000;
+color: white;
+}
+.btn-danger-dark:hover {
+background: #a00000;
+transform: translateY(-1px);
+box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
 /* Your existing CSS styles */
 .flashcards-container {
 max-width: 600px;
@@ -290,6 +311,7 @@ justify-content: center;
 display: flex;
 gap: 0.8rem;
 justify-content: center;
+flex-wrap: wrap;
 }
 .btn {
 padding: clamp(0.4rem, 1.8vw, 0.6rem) clamp(0.8rem, 2.5vw, 1rem);
@@ -319,13 +341,12 @@ cursor: not-allowed;
 transform: none;
 }
 .progress-stats {
-display: flex;
-justify-content: space-around;
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+gap: 0.75rem;
 background: #f8f9fa;
 padding: 0.75rem;
 border-radius: 10px;
-flex-wrap: wrap;
-gap: 0.75rem;
 margin-top: 1rem;
 }
 .stat {
@@ -424,6 +445,7 @@ min-width: 120px;
 .flashcards-navigation { margin: 1rem 0; gap: 0.5rem; }
 .card-content { padding: clamp(1.2rem, 4vw, 2rem); }
 .difficulty-buttons { gap: 0.5rem; }
+.progress-stats { grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
 }
 @media (max-width: 480px) {
 .flashcards-container { padding: 0.5rem; }
@@ -437,6 +459,11 @@ min-width: 120px;
 .completion-text { font-size: 1rem; }
 .completion-actions { flex-direction: column; align-items: center; }
 .completion-actions .btn { width: 100%; max-width: 200px; }
+.progress-stats { grid-template-columns: repeat(2, 1fr); }
+.difficulty-buttons { flex-wrap: wrap; gap: 0.3rem; }
+.difficulty-buttons .btn { flex: 1; min-width: 60px; font-size: 0.7rem; padding: 0.3rem 0.5rem; }
+/* Hide emojis on phone screens */
+.difficulty-buttons .btn { text-indent: -1ch; overflow: hidden; white-space: nowrap; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
 .flashcard { height: clamp(120px, 45vh, 180px); }
@@ -447,7 +474,6 @@ min-width: 120px;
 .card-content { padding: clamp(0.8rem, 3vw, 1.2rem); }
 }
 </style>
-
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
 // Initialize Supabase
@@ -456,7 +482,6 @@ const supabaseClient = createClient(
 'https://xjurrqzjvhzjweufgivl.supabase.co',
 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqdXJycXpqdmh6andldWZnaXZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg5NDUzMTIsImV4cCI6MjA2NDUyMTMxMn0.rimZk-g9-RmvQCbQJ5Phk0lKwOue6pPlgibO-LKHqmM'
 );
-
 // Auth functionality with rate limiting
 let authCheckInProgress = false;
 let lastAuthCheck = 0;
@@ -499,7 +524,6 @@ authLink.onclick = null;
 authCheckInProgress = false;
 }
 }
-
 // Flashcard System
 class FlashcardSystem {
 constructor() {
@@ -516,40 +540,33 @@ id: {{ printf "%s_%s" .term .definition | sha256 | jsonify }}
 {{ end }}
 {{ end }}
 ].filter(card => card.term.trim() && card.definition.trim());
-
-// State
-this.setId = `{{ $indexPage.RelPermalink }}`.replace(/\/+$/, '').replace(/^\//, '');
-this.setTitle = `{{ $indexPage.Title }}`;
+// State - simplified sessionStats (only track reviewed count)
+this.setId = {{ $indexPage.RelPermalink }}.replace(/\/+$/, '').replace(/^\//, '');
+this.setTitle = {{ $indexPage.Title }};
 this.cardData = {};
-this.sessionStats = { reviewed: 0, easy: 0, medium: 0, hard: 0 };
+this.sessionStats = { reviewed: 0 }; // SIMPLIFIED: Only track reviewed count
 this.reviewedInSession = new Set();
 this.currentIndex = 0;
 this.isFlipped = false;
 this.studyMode = 'term-to-definition';
 this.viewMode = 'browse'; // 'browse' or 'study'
 this.cardOrder = [...Array(this.flashcards.length).keys()];
-
 // DOM elements
 this.initDOM();
 this.setupEventListeners();
-
 // Initialize
 this.loadProgress().then(() => {
 this.initializeSession();
 this.updateDisplay();
 });
 }
-
 // NEW: Stress processing method
 processStressedText(text) {
 if (!text) return text;
-
 // Convert *vowel notation to red spans
 let processed = text.replace(/\*([aeiouwAEIOUáéíóúÁÉÍÓÚ])/g, '<span class="stressed-vowel">$1</span>');
-
 return processed;
 }
-
 initDOM() {
 this.elements = {
 flashcard: document.getElementById('flashcard'),
@@ -563,10 +580,14 @@ nextBtn: document.getElementById('next-btn'),
 modeToggleBtn: document.getElementById('mode-toggle-btn'),
 earlyReviewBtn: document.getElementById('early-review-btn'),
 resetBtn: document.getElementById('reset-progress'),
-easyBtn: document.getElementById('easy-btn'),
-mediumBtn: document.getElementById('medium-btn'),
+againBtn: document.getElementById('again-btn'),
 hardBtn: document.getElementById('hard-btn'),
+mediumBtn: document.getElementById('medium-btn'),
+easyBtn: document.getElementById('easy-btn'),
 reviewedCount: document.getElementById('reviewed-count'),
+againCount: document.getElementById('again-count'),
+hardCount: document.getElementById('hard-count'),
+mediumCount: document.getElementById('medium-count'),
 easyCount: document.getElementById('easy-count'),
 reviewCount: document.getElementById('review-count'),
 completionMessage: document.getElementById('completion-message'),
@@ -575,7 +596,6 @@ earlyReviewOption: document.getElementById('early-review-option'),
 modeRadios: document.querySelectorAll('input[name="study-mode"]')
 };
 }
-
 setupEventListeners() {
 this.elements.flashcard.addEventListener('click', () => this.flipCard());
 this.elements.prevBtn.addEventListener('click', () => this.prevCard());
@@ -583,9 +603,11 @@ this.elements.nextBtn.addEventListener('click', () => this.nextCard());
 this.elements.modeToggleBtn.addEventListener('click', () => this.toggleViewMode());
 this.elements.earlyReviewBtn.addEventListener('click', () => this.handleEarlyReview());
 this.elements.resetBtn.addEventListener('click', () => this.resetProgress());
-this.elements.easyBtn.addEventListener('click', () => this.markDifficulty('easy'));
-this.elements.mediumBtn.addEventListener('click', () => this.markDifficulty('medium'));
+// UPDATED: All 4 difficulty buttons
+this.elements.againBtn.addEventListener('click', () => this.markDifficulty('again'));
 this.elements.hardBtn.addEventListener('click', () => this.markDifficulty('hard'));
+this.elements.mediumBtn.addEventListener('click', () => this.markDifficulty('medium'));
+this.elements.easyBtn.addEventListener('click', () => this.markDifficulty('easy'));
 this.elements.modeRadios.forEach(radio => {
 radio.addEventListener('change', (e) => this.changeStudyMode(e.target.value));
 });
@@ -601,7 +623,6 @@ this.elements.completionMessage.style.display = 'none';
 this.startBrowseMode();
 });
 }
-
 // Fisher-Yates Shuffle Algorithm
 shuffleArray(array) {
 const shuffled = [...array]; // Create a copy to avoid mutating original
@@ -611,7 +632,6 @@ const j = Math.floor(Math.random() * (i + 1));
 }
 return shuffled;
 }
-
 // Card filtering - the key difference between regular and early review
 getDueCards(includeEarly = false) {
 const now = Date.now();
@@ -629,8 +649,7 @@ return !card || !card.nextReview || card.nextReview <= now;
 });
 }
 }
-
-// SM-2 Algorithm - unified for all review types
+// FIXED: 4-Level SM-2 Algorithm - restored original logic
 updateCardWithSM2(cardIndex, difficulty) {
 if (!this.cardData[cardIndex]) {
 this.cardData[cardIndex] = {
@@ -644,69 +663,69 @@ nextReview: Date.now()
 const card = this.cardData[cardIndex];
 card.reviewCount++;
 card.lastReviewed = Date.now();
-
-// SM-2 logic
-if (difficulty === 'hard') {
-card.interval = 1;
+card.lastDifficulty = difficulty; // Only addition - track current difficulty
+let quality;
+switch (difficulty) {
+case 'again': quality = 0; break;
+case 'hard': quality = 2; break;
+case 'medium': quality = 3; break;
+case 'easy': quality = 5; break;
+default: quality = 3;
+}
+// Your original SM-2 Algorithm (restored)
+if (quality >= 3) {
+if (card.reviewCount === 1) {
+card.interval = quality === 5 ? 2 : 1; // Easy gets 2 days, others get 1
+} else if (card.reviewCount === 2) {
+card.interval = 6;
+} else {
+card.interval = Math.round(card.interval * card.easeFactor);
+}
+} else {
+card.interval = quality === 0 ? 0.007 : 1; // Again gets ~10 minutes
+}
+// Your original ease factor calculation
+if (quality === 0) {
+card.easeFactor = Math.max(1.3, card.easeFactor - 0.2);
+} else if (quality === 2) {
 card.easeFactor = Math.max(1.3, card.easeFactor - 0.15);
-} else if (difficulty === 'medium') {
-if (card.reviewCount === 1) {
-card.interval = 1;
-} else if (card.reviewCount === 2) {
-card.interval = 3;
-} else {
-card.interval = Math.round(card.interval * card.easeFactor);
+} else if (quality === 3) {
+card.easeFactor = Math.max(1.3, card.easeFactor - 0.02);
+} else if (quality === 5) {
+card.easeFactor = Math.min(2.6, card.easeFactor + 0.1);
 }
-card.easeFactor = Math.max(1.3, card.easeFactor - 0.05);
-} else if (difficulty === 'easy') {
-if (card.reviewCount === 1) {
-card.interval = 2;
-} else if (card.reviewCount === 2) {
-card.interval = 4;
-} else {
-card.interval = Math.round(card.interval * card.easeFactor);
+card.nextReview = card.lastReviewed + (card.interval * 24 * 60 * 60 * 1000);
 }
-card.easeFactor = Math.min(2.5, card.easeFactor + 0.15);
-}
-card.nextReview = Date.now() + (card.interval * 24 * 60 * 60 * 1000);
-}
-
-// Unified difficulty marking - ONLY updates counters in study mode
+// FIXED: Difficulty marking - track current state instead of session actions
 async markDifficulty(level) {
 if (!this.isFlipped) {
 this.flipCard();
 return;
 }
-
-// CRITICAL FIX: Only process difficulty in study mode
 if (this.viewMode !== 'study') {
 return;
 }
-
 const cardIndex = this.cardOrder[this.currentIndex];
-
-// Update session stats - only in study mode
+// Track unique cards reviewed in session
 if (!this.reviewedInSession.has(cardIndex)) {
 this.sessionStats.reviewed++;
 this.reviewedInSession.add(cardIndex);
-if (level === 'easy') this.sessionStats.easy++;
-else if (level === 'medium') this.sessionStats.medium++;
-else if (level === 'hard') this.sessionStats.hard++;
-} else {
-// Card already reviewed in session - just update the difficulty counter
-if (level === 'easy') this.sessionStats.easy++;
-else if (level === 'medium') this.sessionStats.medium++;
-else if (level === 'hard') this.sessionStats.hard++;
 }
-
-// Apply SM-2 algorithm
+// Apply SM-2 algorithm (this stores the lastDifficulty)
 this.updateCardWithSM2(cardIndex, level);
-
 // Save and update display
 await this.saveProgress();
 this.updateStatsDisplay();
-
-// Handle navigation - remove reviewed card from current session
+// Special handling for "Again" cards - keep in current session
+if (level === 'again') {
+if (this.currentIndex < this.cardOrder.length - 1) {
+this.currentIndex++;
+} else {
+this.currentIndex = 0;
+}
+this.updateCard();
+} else {
+// Normal behavior for other difficulties - remove from current session
 this.cardOrder.splice(this.currentIndex, 1);
 if (this.currentIndex >= this.cardOrder.length && this.cardOrder.length > 0) {
 this.currentIndex = this.cardOrder.length - 1;
@@ -714,11 +733,11 @@ this.currentIndex = this.cardOrder.length - 1;
 if (this.cardOrder.length > 0) {
 this.updateCard();
 } else {
-this.saveProgress(); // Ensure final save before showing completion
+this.saveProgress();
 this.showCompletionMessage();
 }
 }
-
+}
 // Session management
 startStudyMode() {
 const dueCards = this.getDueCards();
@@ -733,7 +752,6 @@ this.updateCard();
 this.checkForEarlyReview();
 }
 }
-
 startEarlyReview() {
 const allEarly = this.getDueCards(true);
 const dueNow = this.getDueCards(false);
@@ -749,7 +767,6 @@ this.updateCard();
 alert("No cards are available for early review right now.");
 }
 }
-
 startBrowseMode() {
 this.viewMode = 'browse';
 // BROWSE MODE: Use sequential/alphabetical order
@@ -758,7 +775,6 @@ this.currentIndex = 0;
 this.updateModeButton('📖 Browsing', 'btn-secondary');
 this.updateCard();
 }
-
 checkForEarlyReview() {
 const allEarly = this.getDueCards(true);
 const dueNow = this.getDueCards(false);
@@ -776,7 +792,6 @@ this.showCompletionMessage();
 this.viewMode = 'browse';
 }
 }
-
 // UI Updates
 updateModeButton(text, className) {
 this.elements.modeToggleBtn.textContent = text;
@@ -791,7 +806,6 @@ difficultyButtons.style.display = 'none';
 }
 }
 }
-
 toggleViewMode() {
 if (this.viewMode === 'browse') {
 this.startStudyMode();
@@ -801,7 +815,6 @@ this.startBrowseMode();
 // Only save progress for mode changes, not during navigation
 this.saveProgressSilent();
 }
-
 handleEarlyReview() {
 const allEarly = this.getDueCards(true);
 const dueNow = this.getDueCards(false);
@@ -814,7 +827,6 @@ alert("You have cards due for review! Use the Study button instead.");
 alert("No cards are available for early review right now.");
 }
 }
-
 // MODIFIED: Display Updates with stress processing
 updateCard() {
 if (this.flashcards.length === 0) {
@@ -823,19 +835,15 @@ this.elements.cardQuestionBack.innerHTML = "No flashcards available";
 this.elements.cardAnswer.innerHTML = "Please add lexicon data to the front matter";
 return;
 }
-
 if (this.currentIndex < 0 || this.currentIndex >= this.cardOrder.length) {
 this.currentIndex = 0;
 }
-
 const cardIndex = this.cardOrder[this.currentIndex];
 const card = this.flashcards[cardIndex];
-
 if (!card) {
 console.error('Invalid card at index:', cardIndex);
 return;
 }
-
 let question, answer;
 if (this.studyMode === 'term-to-definition') {
 // Use stressed version if available, fallback to regular term
@@ -846,33 +854,39 @@ question = card.definition;
 // Use stressed version if available, fallback to regular term
 answer = card.stressed || card.term;
 }
-
 // CHANGED: Use innerHTML and process stress marks
 this.elements.cardQuestion.innerHTML = this.processStressedText(question);
 this.elements.cardQuestionBack.innerHTML = this.processStressedText(question);
 this.elements.cardAnswer.innerHTML = this.processStressedText(answer);
-
 this.elements.currentCard.textContent = this.currentIndex + 1;
 this.elements.totalCards.textContent = this.cardOrder.length;
-
 // Update navigation buttons
 this.elements.prevBtn.disabled = this.currentIndex === 0;
 this.elements.nextBtn.disabled = this.currentIndex === this.cardOrder.length - 1;
-
 // Reset flip state
 this.isFlipped = false;
 this.elements.flashcard.classList.remove('flipped');
 }
-
+// FIXED: Stats display - calculate current state dynamically
 updateStatsDisplay() {
 const totalReviewed = Object.values(this.cardData).filter(card => card && card.reviewCount > 0).length;
 const needsReview = this.getDueCards().length;
-
-this.elements.reviewedCount.textContent = totalReviewed;
-this.elements.easyCount.textContent = this.sessionStats.easy;
-this.elements.reviewCount.textContent = needsReview;
+// Calculate current difficulty distribution from card states
+const difficultyStats = { again: 0, hard: 0, medium: 0, easy: 0 };
+for (let i = 0; i < this.flashcards.length; i++) {
+const card = this.cardData[i];
+if (card && card.lastDifficulty) {
+difficultyStats[card.lastDifficulty]++;
 }
-
+}
+this.elements.reviewedCount.textContent = totalReviewed;
+this.elements.reviewCount.textContent = needsReview;
+// Update counters based on current card states
+if (this.elements.againCount) this.elements.againCount.textContent = difficultyStats.again;
+if (this.elements.hardCount) this.elements.hardCount.textContent = difficultyStats.hard;
+if (this.elements.mediumCount) this.elements.mediumCount.textContent = difficultyStats.medium;
+this.elements.easyCount.textContent = difficultyStats.easy;
+}
 updateDisplay() {
 this.updateCard();
 this.updateStatsDisplay();
@@ -886,13 +900,11 @@ this.updateModeButton('📚 Studying', 'btn-primary');
 this.updateModeButton('📖 Browsing', 'btn-secondary');
 }
 }
-
 // Navigation - FIXED: No progress saving for browse mode navigation
 flipCard() {
 this.isFlipped = !this.isFlipped;
 this.elements.flashcard.classList.toggle('flipped');
 }
-
 nextCard() {
 if (this.currentIndex < this.cardOrder.length - 1) {
 this.currentIndex++;
@@ -903,7 +915,6 @@ this.saveProgressSilent();
 }
 }
 }
-
 prevCard() {
 if (this.currentIndex > 0) {
 this.currentIndex--;
@@ -914,14 +925,12 @@ this.saveProgressSilent();
 }
 }
 }
-
 changeStudyMode(mode) {
 this.studyMode = mode;
 this.updateCard();
 // Save mode changes regardless of view mode
 this.saveProgressSilent();
 }
-
 // Completion
 showCompletionMessage() {
 this.viewMode = 'browse';
@@ -930,7 +939,6 @@ const nextReview = this.getNextReviewTime();
 const allEarly = this.getDueCards(true);
 const dueNow = this.getDueCards(false);
 const earlyCards = allEarly.length - dueNow.length;
-
 let message = "You've reviewed all due cards!";
 if (nextReview) {
 const timeUntil = nextReview - Date.now();
@@ -942,7 +950,6 @@ message += ` Next cards will be ready in about ${hoursUntil} hour${hoursUntil !=
 message += ` Next cards will be ready in about ${daysUntil} day${daysUntil !== 1 ? 's' : ''}.`;
 }
 }
-
 this.elements.completionText.textContent = message;
 if (earlyCards > 0) {
 this.elements.earlyReviewOption.style.display = 'inline-block';
@@ -950,11 +957,9 @@ this.elements.earlyReviewOption.textContent = `⏰ Review ${earlyCards} Early Ca
 } else {
 this.elements.earlyReviewOption.style.display = 'none';
 }
-
 this.elements.completionMessage.style.display = 'flex';
 this.saveProgressSilent();
 }
-
 getNextReviewTime() {
 const now = Date.now();
 let earliest = null;
@@ -968,11 +973,10 @@ earliest = card.nextReview;
 }
 return earliest;
 }
-
-// Reset
+// UPDATED: Reset with simplified sessionStats
 resetProgress() {
 this.cardData = {};
-this.sessionStats = { reviewed: 0, easy: 0, medium: 0, hard: 0 };
+this.sessionStats = { reviewed: 0 };
 this.reviewedInSession = new Set();
 this.viewMode = 'browse';
 this.cardOrder = [...Array(this.flashcards.length).keys()];
@@ -980,7 +984,6 @@ this.currentIndex = 0;
 this.updateDisplay();
 this.saveProgressSilent();
 }
-
 // Session initialization
 initializeSession() {
 if (this.viewMode === 'study') {
@@ -1003,7 +1006,6 @@ this.currentIndex = Math.min(this.currentIndex, this.cardOrder.length - 1);
 this.updateModeButton('📖 Browsing', 'btn-secondary');
 }
 }
-
 // Data persistence - FIXED: Added silent save method
 async saveProgress() {
 this.saveToLocalStorage();
@@ -1026,11 +1028,9 @@ cardData: this.cardData
 stats: this.sessionStats,
 updated_at: new Date().toISOString()
 };
-
 const { error: saveError } = await supabaseClient
 .from('flashcard_progress')
 .upsert(progressData, { onConflict: 'user_id,set_id' });
-
 if (saveError) {
 console.error('Supabase save error:', saveError);
 }
@@ -1038,7 +1038,6 @@ console.error('Supabase save error:', saveError);
 console.error('Error saving progress:', e);
 }
 }
-
 // Silent save method - doesn't trigger stats updates
 async saveProgressSilent() {
 this.saveToLocalStorage();
@@ -1068,11 +1067,10 @@ await supabaseClient
 console.error('Error saving progress silently:', e);
 }
 }
-
 async loadProgress() {
-// Always initialize defaults first
+// Always initialize defaults first - SIMPLIFIED
 this.cardData = {};
-this.sessionStats = { reviewed: 0, easy: 0, medium: 0, hard: 0 };
+this.sessionStats = { reviewed: 0 };
 this.reviewedInSession = new Set();
 try {
 const { data: { session }, error } = await supabaseClient.auth.getSession();
@@ -1086,13 +1084,11 @@ const { data, error: dbError } = await supabaseClient
 .eq('user_id', session.user.id)
 .eq('set_id', this.setId)
 .single();
-
 if (dbError && dbError.code !== 'PGRST116') {
 console.error('Database error:', dbError);
 this.loadFromLocalStorage();
 return;
 }
-
 if (data) {
 this.loadFromData(data);
 // Migrate localStorage if newer
@@ -1108,7 +1104,7 @@ console.error('Error loading progress:', e);
 this.loadFromLocalStorage();
 }
 }
-
+// UPDATED: Load data with simplified sessionStats
 loadFromData(data) {
 if (data.card_data) {
 this.cardOrder = this.validateArray(data.card_data.cardOrder, this.flashcards.length) ||
@@ -1122,14 +1118,10 @@ data.card_data.viewMode : 'browse';
 }
 if (data.stats && typeof data.stats === 'object') {
 this.sessionStats = {
-reviewed: data.stats.reviewed || 0,
-easy: data.stats.easy || 0,
-medium: data.stats.medium || 0,
-hard: data.stats.hard || 0
+reviewed: data.stats.reviewed || 0
 };
 }
 }
-
 loadFromLocalStorage() {
 const storageKey = `flashcards_${this.setId}`;
 const saved = localStorage.getItem(storageKey);
@@ -1151,7 +1143,6 @@ console.error('Error parsing localStorage:', e);
 }
 }
 }
-
 async migrateLocalStorageIfNewer(dbUpdatedAt) {
 const storageKey = `flashcards_${this.setId}`;
 const saved = localStorage.getItem(storageKey);
@@ -1177,7 +1168,6 @@ await this.saveProgressSilent();
 console.error('Error during migration:', e);
 }
 }
-
 saveToLocalStorage() {
 const storageKey = `flashcards_${this.setId}`;
 const data = {
@@ -1196,13 +1186,11 @@ localStorage.setItem(storageKey, JSON.stringify(data));
 console.error('Error saving to localStorage:', e);
 }
 }
-
 // Validation helpers
 validateArray(arr, expectedLength) {
 if (!Array.isArray(arr) || arr.length !== expectedLength) return null;
 return arr.every(idx => Number.isInteger(idx) && idx >= 0 && idx < expectedLength) ? arr : null;
 }
-
 validateCardData(data) {
 if (!data || typeof data !== 'object') return null;
 const validated = {};
@@ -1216,20 +1204,17 @@ validated[key] = value;
 return validated;
 }
 }
-
 // Initialize the system
 document.addEventListener('DOMContentLoaded', () => {
 updateAuthLink();
 window.flashcardSystem = new FlashcardSystem();
 });
-
 // Simplified auth state changes - remove the reload that causes loops
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
 console.log('Auth state changed:', event);
 updateAuthLink();
 // Don't reload page automatically - let user continue working
 });
-
 // Throttled focus check
 window.addEventListener('focus', () => {
 setTimeout(updateAuthLink, 1000); // Delay to avoid rapid firing
