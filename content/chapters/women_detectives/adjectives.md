@@ -3,7 +3,7 @@ title: ""
 linkTitle: "Adjectives"
 type: docs
 draft: False 
-weight: 5
+weight: 10
 ---
 # 🎯 Adjectives 
 

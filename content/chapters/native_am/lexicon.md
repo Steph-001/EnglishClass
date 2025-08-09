@@ -2,6 +2,7 @@
 title: "Lexicon" # Or use {{ .Parent.Title }} Lexicon in the layout later
 layout: vocab # Crucial: Tells Hugo to use layouts/TYPE/lexicon.html
 type: docs
+weight: 20
 # You could add description or other meta here if needed
 ---
 

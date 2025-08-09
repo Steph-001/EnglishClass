@@ -1,17 +1,12 @@
 [
   {
-    "base": "go",
-    "past": "went",
-    "participle": "gone"
+    "base": "break",
+    "past": "broke",
+    "participle": "broken"
   },
   {
-    "base": "be",
-    "past": "was/were",
-    "participle": "been"
-  },
-  {
-    "base": "think",
-    "past": "thought",
-    "participle": "thought"
+    "base": "forget",
+    "past": "forgot",
+    "participle": "forgotten"
   }
 ]

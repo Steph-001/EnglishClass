@@ -2,6 +2,7 @@
 title: "Pronouns"
 date: 2025-05-14T16:28:05+02:00
 draft: False 
+weight: 10
 categories: liguisitcs
 tags: grammar 
 ---
